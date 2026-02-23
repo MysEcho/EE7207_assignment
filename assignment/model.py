@@ -58,8 +58,6 @@ class RBFNetwork(pl.LightningModule):
         # Hidden Layer: 'num_centers' neurons (Gaussian RBF)
         self.rbf_layer = RBFGaussianLayer(in_features, num_centers, init_centers)
         
-        # Output Layer: 1 neuron for binary classification
-        # We use a Linear layer to sum the weighted RBF outputs
         self.output_layer = nn.Linear(num_centers, 1)
         
         self.criterion = nn.BCEWithLogitsLoss()
