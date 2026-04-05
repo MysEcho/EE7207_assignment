@@ -1,0 +1,22 @@
+[workspace]
+authors = ["mysecho <antareepsinha12@gmail.com>"]
+channels = ["conda-forge", "pytorch", "nvidia"]
+name = "EE7207_assignment"
+platforms = ["linux-64"]
+version = "0.1.0"
+channel-priority = "disabled"
+
+[tasks]
+
+[dependencies]
+python = "3.11.*"
+numpy = "1.25.*"
+pygltflib = ">=1.16.5,<2" 
+scikit-image = "*" 
+matplotlib = "*"
+pytorch = { version = "*", channel = "pytorch" }
+pytorch-cuda = "12.1.*"
+pip = "*" 
+setuptools = "*" 
+wheel = "*" 
+ninja = "*"

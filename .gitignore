@@ -1,3 +1,6 @@
 \__pycache__/
 \lightning_logs/
 /assignment/dataset
+# pixi environments
+.pixi/*
+!.pixi/config.toml
