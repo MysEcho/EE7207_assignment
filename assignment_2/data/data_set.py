@@ -1,7 +1,9 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset
+from datasets import Dataset as HFDataset
 from transformers import AutoTokenizer
+import pandas as pd
 
 MODEL_NAME = "ProsusAI/finbert" 
 MAX_LEN = 128
@@ -27,12 +29,15 @@ class AspectSentimentDataset(Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
         
-        target_entity = str(item['target'])
+        # 1. Extract strings and the pre-computed integer label
+        target = str(item['target'])
         sentence = str(item['sentence'])
+        label = int(item['label'])
         
-        # Target: [Entity] [SEP] [Sentence]
-        combined_text = f"Target: {target_entity} [SEP] {sentence}"
+        # 2. Apply the SOTA Cross-Encoder Formatting
+        combined_text = f"Target: {target} [SEP] {sentence}"
         
+        # 3. Tokenize
         encoding = self.tokenizer(
             combined_text,
             add_special_tokens=True,
@@ -42,16 +47,6 @@ class AspectSentimentDataset(Dataset):
             return_attention_mask=True,
             return_tensors='pt'
         )
-        
-        # Discretize scores to labels
-        score = float(item['score'])
-        
-        if score <= -0.1:
-            label = 0  # Negative
-        elif score >= 0.1:
-            label = 2  # Positive
-        else:
-            label = 1  # Neutral
 
         return {
             'input_ids': encoding['input_ids'].flatten(),
@@ -61,21 +56,37 @@ class AspectSentimentDataset(Dataset):
 
     @staticmethod
     def create_data_loaders():
-        print("Loading tokenizer and dataset...")
+        print("Loading tokenizer and synthetic dataset...")
         tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         
-        dataset = load_dataset("TheFinAI/fiqa-sentiment-classification")
+        # 1. Load CSV directly via Hugging Face (Bypasses Pandas and import collisions!)
+        dataset = load_dataset("csv", data_files="assignment_2/data/generated_datasets/synthetic_absa_dataset.csv", split="train")
         
-        if 'validation' not in dataset:
-            split_dataset = dataset['train'].train_test_split(test_size=0.2, seed=42)
-            train_data = split_dataset['train']
-            val_data = split_dataset['test']
-        else:
-            train_data = dataset['train']
-            val_data = dataset['validation']
+        # 2. Filter out any empty rows or LLM formatting hallucinations
+        valid_sentiments = ["Negative", "Neutral", "Positive"]
+        dataset = dataset.filter(lambda x: 
+            x['target'] is not None and 
+            x['sentence'] is not None and 
+            x['sentiment'] in valid_sentiments
+        )
+        
+        # 3. Convert string sentiments back to integers for PyTorch
+        label_map = {"Negative": 0, "Neutral": 1, "Positive": 2}
+        def encode_labels(example):
+            example['label'] = label_map[example['sentiment']]
+            return example
+            
+        dataset = dataset.map(encode_labels)
+        
+        # 4. Split 80/20 for Train/Validation
+        split_dataset = dataset.train_test_split(test_size=0.2, seed=42)
+        train_data = split_dataset['train']
+        val_data = split_dataset['test']
 
-        print(f"Train size: {len(train_data)} | Validation size: {len(val_data)}")
+        print(f"Cleaned Train size: {len(train_data)} | Validation size: {len(val_data)}")
 
+        # 5. Pass into your custom PyTorch Dataset (Keep this exactly as you had it!)
+        # (Assuming your custom class is named AspectSentimentDataset or FinancialNewsDataset)
         train_dataset = AspectSentimentDataset(train_data, tokenizer, MAX_LEN)
         val_dataset = AspectSentimentDataset(val_data, tokenizer, MAX_LEN)
 

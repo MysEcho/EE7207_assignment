@@ -15,16 +15,19 @@ class FinBERTLoRAModel(pl.LightningModule):
         base_model = AutoModelForSequenceClassification.from_pretrained(
             model_name, 
             num_labels=num_labels,
-            ignore_mismatched_sizes=True 
+            ignore_mismatched_sizes=True,
+            use_safetensors = True,
         )
         
         # Configure LoRA adapters
         lora_config = LoraConfig(
             task_type=TaskType.SEQ_CLS, # Sequence Classification
-            r=8,                        # Rank of the update matrices (lower = faster, less memory)
+            r=32,                        # Rank of the update matrices (lower = faster, less memory)
             lora_alpha=16,              # Scaling factor
+            target_modules ="all-linear",
             lora_dropout=0.1,           # Dropout probability for LoRA layers
-            bias="none"                 # Train only the LoRA weights, no biases
+            bias="none",                 # Train only the LoRA weights, no biases
+            modules_to_save=["classifier"],
         )
         
         # Wrap model with LoRA adapters
