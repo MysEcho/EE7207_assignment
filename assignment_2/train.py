@@ -3,19 +3,19 @@ from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
 import warnings
 
-from data import AspectSentimentDataset
-from models import FinBERTLoRAModel
+from data import CryptoSentimentDataset
+from models import BERTLoRAModel
 
 def main():
     warnings.filterwarnings("ignore")
 
     print("--- Initializing Data Loaders ---")
-    train_loader, val_loader, tokenizer = AspectSentimentDataset.create_data_loaders()
+    train_loader, val_loader, tokenizer = CryptoSentimentDataset.create_data_loaders()
 
     print("\n--- Initializing Model ---")
 
-    model = FinBERTLoRAModel(
-        model_name="ProsusAI/finbert",
+    model = BERTLoRAModel(
+        model_name="cardiffnlp/twitter-roberta-base",
         num_labels=3,
         learning_rate=2e-4
     )
@@ -23,7 +23,7 @@ def main():
     print("\n--- Setting up Callbacks and Logger ---")
     checkpoint_callback = ModelCheckpoint(
         dirpath="assignment_2/checkpoints",
-        filename="finbert-lora-{epoch:02d}-{val_f1:.4f}",
+        filename="TweetBERT-lora-{epoch:02d}-{val_f1:.4f}",
         save_top_k=1,         
         monitor="val_f1",     
         mode="max"            
@@ -40,7 +40,7 @@ def main():
 
     print("\n--- Initializing PyTorch Lightning Trainer ---")
     trainer = pl.Trainer(
-        max_epochs=15,                                          
+        max_epochs=4,                                          
         callbacks=[checkpoint_callback, early_stop_callback],
         logger=logger,
         accelerator="auto",                                    

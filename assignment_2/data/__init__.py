@@ -1,1 +1,1 @@
-from .data_set import AspectSentimentDataset
+from .data_set import CryptoSentimentDataset

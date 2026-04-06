@@ -5,8 +5,8 @@ from transformers import AutoModelForSequenceClassification
 from peft import get_peft_model, LoraConfig, TaskType
 from torchmetrics import Accuracy, F1Score
 
-class FinBERTLoRAModel(pl.LightningModule):
-    def __init__(self, model_name="ProsusAI/finbert", num_labels=3, learning_rate=2e-4):
+class BERTLoRAModel(pl.LightningModule):
+    def __init__(self, model_name="cardiffnlp/twitter-roberta-base", num_labels=3, learning_rate=2e-4):
         super().__init__()
 
         self.save_hyperparameters()
@@ -22,11 +22,11 @@ class FinBERTLoRAModel(pl.LightningModule):
         # Configure LoRA adapters
         lora_config = LoraConfig(
             task_type=TaskType.SEQ_CLS, # Sequence Classification
-            r=32,                        # Rank of the update matrices (lower = faster, less memory)
+            r=32,                        # Rank of the update matrices 
             lora_alpha=16,              # Scaling factor
             target_modules ="all-linear",
             lora_dropout=0.1,           # Dropout probability for LoRA layers
-            bias="none",                 # Train only the LoRA weights, no biases
+            bias="none",                 
             modules_to_save=["classifier"],
         )
         
@@ -42,7 +42,11 @@ class FinBERTLoRAModel(pl.LightningModule):
 
     def forward(self, input_ids, attention_mask):
 
-        return self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+        outputs = self.model(
+            input_ids=input_ids, 
+            attention_mask=attention_mask,
+        )
+        return outputs.logits
 
     def training_step(self, batch, batch_idx):
         input_ids = batch['input_ids']

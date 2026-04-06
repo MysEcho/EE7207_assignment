@@ -1,27 +1,34 @@
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import warnings
+import pandas as pd
+from models import BERTLoRAModel
 
-from models import FinBERTLoRAModel
+def load_hf_model(model_name, device):
+    """Loads a standard HuggingFace Sequence Classification model."""
+    print(f"Loading {model_name}...")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name,
+        use_safetensors=True
+    ).to(device)
+    
+    model.eval()
+    return model, tokenizer
 
-def load_model_and_tokenizer(checkpoint_path, base_model_name="ProsusAI/finbert"):
-    """Loads the tokenizer and the fine-tuned LoRA model from a checkpoint."""
-    print("Loading tokenizer and model...")
+def load_custom_model(checkpoint_path, base_model_name, device):
+    """Loads your custom LoRA fine-tuned model."""
+    print("Loading Custom Model from checkpoint...")
     tokenizer = AutoTokenizer.from_pretrained(base_model_name)
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = FinBERTLoRAModel.load_from_checkpoint(checkpoint_path).to(device)
-    model.eval() 
-    
-    return model, tokenizer, device
+    model = BERTLoRAModel.load_from_checkpoint(checkpoint_path).to(device)
+    model.eval()
+    return model, tokenizer
 
-def predict_aspect_sentiment(sentence, target_entity, model, tokenizer, device):
-    """Predicts the sentiment of a sentence towards a specific target entity."""
-    
-    combined_text = f"Target: {target_entity} [SEP] {sentence}"
-    
+def predict(sentence, model, tokenizer, device, label_map, is_custom=False):
+    """Generic inference function handling both HF and custom Lightning models."""
     inputs = tokenizer(
-        combined_text,
+        text=sentence,
         return_tensors="pt",
         padding=True,
         truncation=True,
@@ -32,152 +39,112 @@ def predict_aspect_sentiment(sentence, target_entity, model, tokenizer, device):
     attention_mask = inputs["attention_mask"].to(device)
     
     with torch.no_grad():
-        logits = model(input_ids, attention_mask)
-        
+        if is_custom:
+            logits = model(input_ids=input_ids, attention_mask=attention_mask)
+        else:
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            logits = outputs.logits
+            
     probabilities = torch.nn.functional.softmax(logits, dim=1).squeeze()
     predicted_class_id = torch.argmax(probabilities).item()
     
-    label_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
     prediction = label_map[predicted_class_id]
     confidence = probabilities[predicted_class_id].item() * 100
     
-    return prediction, confidence
+    return f"{prediction} ({confidence:.1f}%)"
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")
-    CHECKPOINT_PATH = "assignment_2/checkpoints/finbert-lora-epoch=03-val_f1=0.7313.ckpt" 
     
-    try:
-        model, tokenizer, device = load_model_and_tokenizer(CHECKPOINT_PATH)
-        print(f"Model successfully loaded onto {device}!\n")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"--- Initialization started on {device} ---\n")
+    
+    # Baseline: Twitter RoBERTa (General social media sentiment)
+    # RoBERTa labels are 0:Negative, 1:Neutral, 2:Positive. Mapped to crypto terms.
+    baseline_model, baseline_tok = load_hf_model("cardiffnlp/twitter-roberta-base-sentiment", device)
+    baseline_map = {0: "BEARISH", 1: "NEUTRAL", 2: "BULLISH"}
+    
+    # CryptoBERT
+    cryptobert_model, cryptobert_tok = load_hf_model("ElKulako/cryptobert", device)
+    cryptobert_map = {int(k): v.upper() for k, v in cryptobert_model.config.id2label.items()}
+    
+    # Custom Model 1.5B Qwen 2.5 Distilled 
+    CHECKPOINT_PATH = "assignment_2/checkpoints/TweetBERT-lora-epoch=4-qwen-1.5b.ckpt"
+    custom_model, custom_tok = load_custom_model(CHECKPOINT_PATH, "cardiffnlp/twitter-roberta-base", device)
+    custom_map = {0: "BEARISH", 1: "NEUTRAL", 2: "BULLISH"}
+
+    print("\nAll models successfully loaded!\n")
+
+    test_cases = [
+        "buying the dip on ETH right now, it's about to explode 🚀",
+        "the market is bleeding, cut your losses and sell now",
+        "hello i'm good nigerian prince, please send me all of your btc",
+        "thanks admin, i will check my dm", 
+        "congrats and fuck you. true diamond hands 💎 ✋ if this is true.", 
+        "chipotle is now accepting shib as a form of payment.",
+        "cheapest i can find in uae atm is 489k aed.",
+        "paper handed bitch unless proven otherwise",
+        "fuck!! you've been an absolute monster in the market. You've smashed it!!",
+        "Fuck you man!! I seriously can't believe you got that stock for so cheap." 
+    ]
+
+    test_cases.extend([
+        # Extreme Praise/Jealousy
+        "You disgust me. Enjoy the early retirement, asshole.", # Expected: BULLISH
+        "Holy shit, my wife's boyfriend is going to be so happy with these gains.", # Expected: BULLISH
+        "Disgusting. Unbelievable. You held through an 80% drawdown and actually made it out rich. Fuck you.", # Expected: BULLISH
         
-        test_cases = [
-            # 1 & 2: Contrasting Entities (Testing attention boundary)
-            {
-                "target": "AMD",
-                "sentence": "AMD's server chips are eating into Intel's market share at an unprecedented rate."
-            },
-            {
-                "target": "Intel",
-                "sentence": "AMD's server chips are eating into Intel's market share at an unprecedented rate."
-            },
-            
-            # 3 & 4: Sub-Entity vs Parent Entity (Mixed signals in one company)
-            {
-                "target": "AWS",
-                "sentence": "Despite AWS posting record-breaking profits, Amazon's retail division dragged overall earnings down."
-            },
-            {
-                "target": "Amazon",
-                "sentence": "Despite AWS posting record-breaking profits, Amazon's retail division dragged overall earnings down."
-            },
-
-            # 5: Sarcasm / Irony
-            {
-                "target": "WeWork",
-                "sentence": "Another brilliant quarter for WeWork, managing to burn through a billion dollars of cash while pretending to be a tech company."
-            },
-
-            # 6: Complex Negation / Double Negative
-            {
-                "target": "Tesla",
-                "sentence": "It is not entirely inaccurate to say that Tesla's latest production numbers weren't a complete disaster."
-            },
-
-            # 7: Expectations vs. Reality (Numbers are positive, sentiment is negative)
-            {
-                "target": "Microsoft",
-                "sentence": "Microsoft's earnings grew by an impressive 15%, but since Wall Street priced in 25%, the stock was brutally punished."
-            },
-
-            # 8: Guilt by Association / Macro impacts
-            {
-                "target": "Coinbase",
-                "sentence": "The SEC's aggressive crackdown on Binance sent shockwaves through the crypto market, leaving Coinbase as collateral damage."
-            },
-
-            # 9: Praise by Association
-            {
-                "target": "TSMC",
-                "sentence": "Apple's stellar iPhone sales over the holiday season inevitably mean a massive windfall for TSMC."
-            },
-
-            # 10: Idioms and Financial Jargon
-            {
-                "target": "Boeing",
-                "sentence": "Retail investors are just catching a falling knife with Boeing after the latest regulatory groundings."
-            },
-
-            # 11: Conditional / Hypothetical Risk
-            {
-                "target": "Netflix",
-                "sentence": "If Netflix cannot curb password sharing effectively in Europe, their Q4 margins will face severe headwinds."
-            },
-
-            # 12 & 13: Acquisition & Competitor Dynamics
-            {
-                "target": "Twitter",
-                "sentence": "Elon Musk's chaotic restructuring of Twitter has been a surprising boon for Bluesky's user acquisition."
-            },
-            {
-                "target": "Bluesky",
-                "sentence": "Elon Musk's chaotic restructuring of Twitter has been a surprising boon for Bluesky's user acquisition."
-            },
-
-            # 14: Implicit Negative (No explicitly negative words, but bad news)
-            {
-                "target": "Credit Suisse",
-                "sentence": "The unexpected and sudden departure of the CFO has left Credit Suisse investors asking very tough questions."
-            },
-
-            # 15: Nuanced Neutral / Balanced clauses
-            {
-                "target": "Alphabet",
-                "sentence": "Alphabet's decision to acquire the cybersecurity firm aligns with their long-term strategy, though the premium paid was undeniably steep."
-            },
-
-            # 16: Macro vs Micro Divergence
-            {
-                "target": "Snowflake",
-                "sentence": "While the broader tech sector rallied heavily on cooling inflation, Snowflake's weak forward guidance left it out in the cold."
-            },
-
-            # 17: Backhanded Compliment
-            {
-                "target": "Exxon",
-                "sentence": "Exxon's dividend yield looks incredibly attractive right now, but only because the underlying stock price has cratered."
-            },
-
-            # 18: Regulatory vs Financial conflict
-            {
-                "target": "Google",
-                "sentence": "The DOJ antitrust lawsuit against Google remains a dark cloud, yet their core ad revenue is practically bulletproof."
-            },
-
-            # 19: Turnaround / Temporal Shift
-            {
-                "target": "Disney",
-                "sentence": "After a disastrous box office year, Disney's surprise restructuring finally gives the bulls a reason to smile."
-            },
-
-            # 20: Aggressive Negation
-            {
-                "target": "Ford",
-                "sentence": "Ford didn't just miss their quarterly targets; they fundamentally failed to understand the shift in EV consumer demand."
-            }
-        ]
+        # Sarcasm & "Copium"
+        "Wow, another 20% drop. My portfolio is doing absolutely fantastic today.", # Expected: BEARISH
+        "This is fine. We are just consolidating before the next massive leg up, right guys? Right?", # Expected: BEARISH (or Neutral)
+        "Oh no, Bitcoin crashed to $60k, whatever will I do? *aggressively buys more*", # Expected: BULLISH
         
-        print(" Running Inference Tests ")
-        for test in test_cases:
-            target = test["target"]
-            sentence = test["sentence"]
-            
-            sentiment, confidence = predict_aspect_sentiment(sentence, target, model, tokenizer, device)
-            
-            print(f"Sentence: '{sentence}'")
-            print(f"Target Entity: {target}")
-            print(f"Predicted Sentiment: {sentiment} (Confidence: {confidence:.2f}%)\n")
-            
-    except FileNotFoundError:
-        print(f"Error: Could not find checkpoint at {CHECKPOINT_PATH}.")
-        print("Please ensure you have pasted the exact filename from your checkpoints/ directory.")
+        # Pure Panic & Capitulation 
+        "I'm officially tapped out. Margin called and liquidated. See you guys at McDonald's.", # Expected: BEARISH
+        "Catching a falling knife right now. Blood in the streets and I have no fiat left.", # Expected: BEARISH
+        "Another massive rug pull. Devs dumped their bags and locked the telegram.", # Expected: BEARISH
+        
+        # Technical Analysis Jargon 
+        "BTC just broke through the 200 SMA on the 4H chart. Golden cross incoming.", # Expected: BULLISH
+        "Looking at a textbook head and shoulders pattern here. Breakdown below support confirms it.", # Expected: BEARISH
+        "Revenue is up but forward guidance is absolute trash. Puts are going to print at open.", # Expected: BEARISH
+        
+        # Scams, Phishing & Bot Noise 
+        "Click the link in my bio to double your Doge instantly! Limited time airdrop!", # Expected: BEARISH (or Noise/Neutral depending on your mapping)
+        "DM me 'CRYPTO' and I'll add you to my VIP signals group where we print money daily 🤑", # Expected: BEARISH
+        
+        # Irrelevant Meta-Chatter & News 
+        "Why was my post deleted? Mods are literally acting like dictators today.", # Expected: NEUTRAL
+        "Anyone know what time the FOMC meeting starts in EST?", # Expected: NEUTRAL
+        "Honestly I forgot I even had a Coinbase account until I saw this thread.", # Expected: NEUTRAL
+        "Can someone link the discord server? The old invite expired.", # Expected: NEUTRAL
+        "Solana network is currently experiencing an outage, validators are working on a restart.", # Expected: NEUTRAL
+        
+        # The "Diamond Hands" Extremists 
+        "They want you to panic sell. Not giving up a single satoshi. Riding this to zero or Valhalla." # Expected: BULLISH
+    ])
+    
+    print("="*80)
+    print(" RUNNING COMPARATIVE INFERENCE TESTS ")
+    print("="*80 + "\n")
+    
+    results = []
+    
+    for sentence in test_cases:
+
+        base_pred = predict(sentence, baseline_model, baseline_tok, device, baseline_map, is_custom=False)
+        crypto_pred = predict(sentence, cryptobert_model, cryptobert_tok, device, cryptobert_map, is_custom=False)
+        custom_pred = predict(sentence, custom_model, custom_tok, device, custom_map, is_custom=True)
+        
+        results.append({
+            "Tweet": sentence,
+            "Baseline (RoBERTa)": base_pred,
+            "CryptoBERT": crypto_pred,
+            "Custom (Ours)": custom_pred
+        })
+
+    pd.set_option('display.max_colwidth', None)
+    pd.set_option('display.width', 200)
+    df_results = pd.DataFrame(results)
+    
+    print(df_results.to_string(index=False))
