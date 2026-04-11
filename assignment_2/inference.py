@@ -70,7 +70,7 @@ if __name__ == "__main__":
     
     # Custom Model: 1.5B Distilled
     print("\nLoading Custom Model (1.5B Distilled)...")
-    CKPT_1_5B = "assignment_2/checkpoints/BERTTweet-lora-qwen-1.5B.ckpt"
+    CKPT_1_5B = "assignment_2/checkpoints/ERTTweet-lora-qwen-1.5B.ckpt"
     model_1_5b, tok_1_5b = load_custom_model(CKPT_1_5B, "cardiffnlp/twitter-roberta-base", device)
     
     # Custom Model: 7B Distilled
