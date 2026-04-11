@@ -35,5 +35,6 @@ To train your own model:
 ```bash
 python train.py
 ```
+NOTE: Datasets will be released later.
 
-The generated synthetic datasets are released and can be found in /data/generated_datasets. The model checkpoints can be found in /checkpoints.
+<!-- The generated synthetic datasets are released and can be found in /data/generated_datasets. The model checkpoints can be found in /checkpoints. -->
