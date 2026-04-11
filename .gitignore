@@ -4,3 +4,7 @@
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+assignment_2/logs/
+logs/
+assignment_2/data/generated_datasets/
+checkpoints/
