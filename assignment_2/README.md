@@ -11,63 +11,29 @@
 
 ---
 
-## Setup Guide
-
-### 1. NVIDIA Driver Installation(Ignore if you already have it installed)
-
-First, check your available drivers:
-```bash
-ubuntu-drivers devices
-```
-
-Install the recommended driver and reboot your system:
-
-```bash
-sudo apt install nvidia-driver-590-open
-sudo reboot
-```
-
-Verify the installation:
-
-```bash
-nvidia-smi
-```
-Also make sure you install the CUDA Toolkit.
-
-### 2. Installe Pixi 
-
-We use Pixi for deterministic package management. Install it via curl:
-
-```bash
-curl -fsSL [https://pixi.sh/install.sh](https://pixi.sh/install.sh) | bash
-```
-
-### 3. Clone the repository:
+### 1. Clone the repository:
 
 Clone the repository:
 
 ```bash
 git clone https://github.com/MysEcho/EE7207_assignment.git
+cd assignment_2
 ```
 
-### 4. Setup the environment
+### 2. Run your code
 
-From the project root, run this command:
-
-```bash
-pixi install
-```
-
-Then activate the Pixi environment:
-
-```bash
-pixi shell
-```
-
-### 5. Run your code
+Assuming the Pixi environment has been set up and the user is inside the Pixi Shell.
 
 To run the inference script:
 
 ```bash
 python inference.py
 ```
+
+To train your own model:
+
+```bash
+python train.py
+```
+
+The generated synthetic datasets are released and can be found in /data/generated_datasets. The model checkpoints can be found in /checkpoints.

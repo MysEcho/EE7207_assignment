@@ -70,12 +70,12 @@ if __name__ == "__main__":
     
     # Custom Model: 1.5B Distilled
     print("\nLoading Custom Model (1.5B Distilled)...")
-    CKPT_1_5B = "assignment_2/checkpoints/TweetBERT-lora-epoch=4-qwen-1.5b.ckpt"
+    CKPT_1_5B = "assignment_2/checkpoints/BERTTweet-lora-qwen-1.5B.ckpt"
     model_1_5b, tok_1_5b = load_custom_model(CKPT_1_5B, "cardiffnlp/twitter-roberta-base", device)
     
     # Custom Model: 7B Distilled
     print("Loading Custom Model (7B Distilled)...")
-    CKPT_7B = "assignment_2/checkpoints/TweetBERT-lora-qwen7B-epoch=01-val_f1=0.7536.ckpt"
+    CKPT_7B = "assignment_2/checkpoints/BERTTweet-lora-qwen7B.ckpt"
     model_7b, tok_7b = load_custom_model(CKPT_7B, "cardiffnlp/twitter-roberta-base", device)
     
     custom_map = {0: "BEARISH", 1: "NEUTRAL", 2: "BULLISH"}
